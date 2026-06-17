@@ -1,0 +1,5 @@
+# Zed Coding Guidelines
+
+- **Style**: This is a high-speed, Rust-backed editing workflow. Write brief, highly modular Python modules with strict typing. Keep file lengths short.
+- **Config Boundary**: Never hardcode coordinate thresholds, max step loops, or exploration constants. All items must be derived from `configs/`.
+- **Compute Protocol**: Remind the user to commit and push their local changes to GitHub once modifications are completed so they can be pulled down on the remote cluster for verification. Do not recommend running execution checks inside Zed's local terminal threads.
