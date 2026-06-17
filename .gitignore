@@ -1,0 +1,18 @@
+# --- System & Python Defaults ---
+__pycache__/
+*.pyc
+.DS_Store
+.env
+.venv/
+# uv.lock
+
+# --- Framework-Specific Files ---
+.agentops/
+outputs/
+scorecards/
+
+# --- Experiment Logs & Bulky Items ---
+# Keep your lightweight ledger.md, but ignore massive downloaded frames/weights
+artifacts/*
+!artifacts/exp-*/scorecard.json
+!artifacts/exp-*/metrics.json
