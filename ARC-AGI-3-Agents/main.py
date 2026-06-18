@@ -1,9 +1,4 @@
 # ruff: noqa: E402
-from dotenv import load_dotenv
-
-load_dotenv(dotenv_path=".env.example")
-load_dotenv(dotenv_path=".env", override=True)
-
 import argparse
 import json
 import logging
@@ -12,15 +7,53 @@ import signal
 import sys
 import threading
 from functools import partial
+from pathlib import Path
 from types import FrameType
 from typing import Optional
 
 import requests
+from dotenv import load_dotenv
+
+APP_DIR = Path(__file__).resolve().parent
+PRESET_ARC_API_KEY = os.environ.get("ARC_API_KEY")
+
+load_dotenv(dotenv_path=APP_DIR / ".env.example")
+load_dotenv(dotenv_path=APP_DIR / ".env", override=True)
+
+if PRESET_ARC_API_KEY:
+    os.environ["ARC_API_KEY"] = PRESET_ARC_API_KEY
+if os.environ.get("ARC_BASE_URL"):
+    os.environ["ARC_BASE_URL"] = os.environ["ARC_BASE_URL"].rstrip("/")
+if os.environ.get("ARC_API_KEY") == "your_arc_api_key_here":
+    os.environ.pop("ARC_API_KEY")
+
+# -------------------------------------------------------------------------
+# Dynamic Environment Guard: Probe connection to see if we are offline.
+# -------------------------------------------------------------------------
+logger = logging.getLogger()
+IS_ONLINE = True
+
+try:
+    # Quick low-timeout ping to verify if the official server is reachable
+    requests.get("https://three.arcprize.org", timeout=3)
+except requests.exceptions.RequestException:
+    IS_ONLINE = False
+
+if not IS_ONLINE:
+    if not os.environ.get("ARC_API_KEY"):
+        os.environ["ARC_API_KEY"] = "offline_evaluation_placeholder"
+    if not os.environ.get("ONLINE_ONLY"):
+        os.environ["ONLINE_ONLY"] = "False"
+elif os.environ.get("ARC_API_KEY"):
+    os.environ.setdefault("ONLINE_ONLY", "True")
+    os.environ.setdefault("OPERATION_MODE", "online")
+    os.environ.setdefault("SCHEME", "https")
+    os.environ.setdefault("HOST", "three.arcprize.org")
+    os.environ.setdefault("PORT", "443")
+# -------------------------------------------------------------------------
 
 from agents import AVAILABLE_AGENTS, Swarm
 from agents.tracing import initialize as init_agentops
-
-logger = logging.getLogger()
 
 SCHEME = os.environ.get("SCHEME", "http")
 HOST = os.environ.get("HOST", "localhost")
@@ -85,8 +118,10 @@ def main() -> None:
     logger.addHandler(file_handler)
     logger.addHandler(stdout_handler)
 
-    # logging.getLogger("requests").setLevel(logging.CRITICAL)
-    # logging.getLogger("werkzeug").setLevel(logging.CRITICAL)
+    if not IS_ONLINE:
+        logger.info(
+            "Offline environment detected. Enabled automated local framework fallback triggers."
+        )
 
     parser = argparse.ArgumentParser(description="ARC-AGI-3-Agents")
     parser.add_argument(
@@ -146,6 +181,32 @@ def main() -> None:
         logger.info(
             f"Using game '{game_prefix}' derived from playback recording filename"
         )
+
+    # -------------------------------------------------------------------------
+    # Offline Fallback Engine
+    # When isolated from the API server, seed games from arguments or datasets
+    # -------------------------------------------------------------------------
+    if not full_games:
+        if args.game:
+            full_games = args.game.split(",")
+            logger.info(
+                f"Offline Mode: Seeded game indices from CLI parameters: {full_games}"
+            )
+        else:
+            env_dir = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "../environment_files")
+            )
+            if os.path.exists(env_dir):
+                full_games = [
+                    os.path.splitext(f)[0]
+                    for f in os.listdir(env_dir)
+                    if f.endswith(".json")
+                ]
+                logger.info(
+                    f"Offline Mode: Detected {len(full_games)} local game frames inside environment_files/"
+                )
+    # -------------------------------------------------------------------------
+
     games = full_games[:]
     if args.game:
         filters = args.game.split(",")
@@ -183,7 +244,7 @@ def main() -> None:
         args.agent,
         ROOT_URL,
         games,
-        tags=tags,  # Pass tags as keyword argument
+        tags=tags,
     )
     agent_thread = threading.Thread(target=partial(run_agent, swarm))
     agent_thread.daemon = True  # die when the main thread dies
@@ -192,9 +253,8 @@ def main() -> None:
     signal.signal(signal.SIGINT, partial(cleanup, swarm))  # handler for Ctrl+C
 
     try:
-        # Wait for the agent thread to complete
         while agent_thread.is_alive():
-            agent_thread.join(timeout=5)  # Check every 5 second
+            agent_thread.join(timeout=5)  # Check every 5 seconds
     except KeyboardInterrupt:
         logger.info("KeyboardInterrupt received in main thread")
         cleanup(swarm, signal.SIGINT, None)

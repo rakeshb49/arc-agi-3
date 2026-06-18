@@ -10,9 +10,16 @@ from .agent import Agent, Playback
 from .recorder import Recorder
 from .swarm import Swarm
 
-# Inject your local src directory path and import your custom agent cleanly
+# Inject BOTH paths:
+# 1. 'src/' so that solution_agent can find 'utils.grid_parsers'
+# 2. 'src/agents/' so we can import solution_agent directly without namespace conflicts
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src")))
-from agents.solution_agent import AdvancedReasoningAgent
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "../../src/agents"))
+)
+
+# Import directly from the file name to avoid shadowing the framework's 'agents' package
+from solution_agent import AdvancedReasoningAgent
 
 load_dotenv()
 
