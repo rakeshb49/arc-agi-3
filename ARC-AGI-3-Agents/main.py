@@ -15,6 +15,9 @@ import requests
 from dotenv import load_dotenv
 
 APP_DIR = Path(__file__).resolve().parent
+REPO_DIR = APP_DIR.parent
+ENVIRONMENTS_DIR = REPO_DIR / "environment_files"
+RECORDINGS_DIR = REPO_DIR / "recordings"
 PRESET_ARC_API_KEY = os.environ.get("ARC_API_KEY")
 
 load_dotenv(dotenv_path=APP_DIR / ".env.example")
@@ -40,10 +43,14 @@ except requests.exceptions.RequestException:
     IS_ONLINE = False
 
 if not IS_ONLINE:
-    if not os.environ.get("ARC_API_KEY"):
-        os.environ["ARC_API_KEY"] = "offline_evaluation_placeholder"
-    if not os.environ.get("ONLINE_ONLY"):
-        os.environ["ONLINE_ONLY"] = "False"
+    os.environ["OPERATION_MODE"] = "offline"
+    os.environ["ONLINE_ONLY"] = "False"
+    os.environ["ENVIRONMENTS_DIR"] = str(ENVIRONMENTS_DIR)
+    os.environ["RECORDINGS_DIR"] = str(RECORDINGS_DIR)
+    os.environ["SCHEME"] = "http"
+    os.environ["HOST"] = "localhost"
+    os.environ["PORT"] = "8001"
+    os.environ.setdefault("ARC_API_KEY", "offline_evaluation_placeholder")
 elif os.environ.get("ARC_API_KEY"):
     os.environ.setdefault("ONLINE_ONLY", "True")
     os.environ.setdefault("OPERATION_MODE", "online")
@@ -149,30 +156,31 @@ def main() -> None:
         logger.error("An Agent must be specified")
         return
 
-    print(f"{ROOT_URL}/api/games")
-
     # Get the list of games from the API
     full_games = []
-    try:
-        with requests.Session() as session:
-            session.headers.update(HEADERS)
-            r = session.get(f"{ROOT_URL}/api/games", timeout=10)
+    if IS_ONLINE:
+        print(f"{ROOT_URL}/api/games")
+        try:
+            with requests.Session() as session:
+                session.headers.update(HEADERS)
+                r = session.get(f"{ROOT_URL}/api/games", timeout=10)
 
-        if r.status_code == 200:
-            try:
-                full_games = [g["game_id"] for g in r.json()]
-            except (ValueError, KeyError) as e:
-                logger.error(f"Failed to parse games response: {e}")
-                logger.error(f"Response content: {r.text[:200]}")
-        else:
-            logger.error(
-                f"API request failed with status {r.status_code}: {r.text[:200]}"
-            )
+            if r.status_code == 200:
+                try:
+                    full_games = [g["game_id"] for g in r.json()]
+                except (ValueError, KeyError) as e:
+                    logger.error(f"Failed to parse games response: {e}")
+                    logger.error(f"Response content: {r.text[:200]}")
+            else:
+                logger.error(
+                    f"API request failed with status {r.status_code}: {r.text[:200]}"
+                )
 
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to connect to API server: {e}")
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Failed to connect to API server: {e}")
+    else:
+        logger.info("Offline Mode: Skipping remote game list fetch.")
 
-    # For playback agents, we can derive the game from the recording filename
     if not full_games and args.agent and args.agent.endswith(".recording.jsonl"):
         from agents.recorder import Recorder
 
@@ -182,10 +190,6 @@ def main() -> None:
             f"Using game '{game_prefix}' derived from playback recording filename"
         )
 
-    # -------------------------------------------------------------------------
-    # Offline Fallback Engine
-    # When isolated from the API server, seed games from arguments or datasets
-    # -------------------------------------------------------------------------
     if not full_games:
         if args.game:
             full_games = args.game.split(",")
@@ -193,19 +197,14 @@ def main() -> None:
                 f"Offline Mode: Seeded game indices from CLI parameters: {full_games}"
             )
         else:
-            env_dir = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "../environment_files")
-            )
-            if os.path.exists(env_dir):
+            if ENVIRONMENTS_DIR.exists():
                 full_games = [
-                    os.path.splitext(f)[0]
-                    for f in os.listdir(env_dir)
-                    if f.endswith(".json")
+                    json.loads(metadata_file.read_text(encoding="utf-8"))["game_id"]
+                    for metadata_file in ENVIRONMENTS_DIR.rglob("metadata.json")
                 ]
                 logger.info(
                     f"Offline Mode: Detected {len(full_games)} local game frames inside environment_files/"
                 )
-    # -------------------------------------------------------------------------
 
     games = full_games[:]
     if args.game:
