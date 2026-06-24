@@ -140,27 +140,45 @@ A **Swarm** orchestrates multiple agent instances across all available games in 
 
 ---
 
-### [ARC-AGI-3 Preview Agent Competition](https://arcprize.org/blog/arc-agi-3-preview-30-day-learnings)
-The winning solution from the 2025 Preview would score close to 0% in the current ARC Prize 2026 track.
+### ARC-AGI-3 Preview Findings: Architectural Primitives for 2026
 
-The preview was a sandbox designed to catch exactly the kinds of shortcuts the 2025 winner used. Here is what changed and why the old meta is dead.
+The July–August 2025 Preview Competition (won by StochasticGoose at 12.58%) \[1\]\[2\] proved that scaling standard RL or injecting raw grid frames into LLMs fails due to sample inefficiency and context limits \[3\]. When the preview winner was later evaluated on the full 2026 benchmark, its score plummeted to 0.25% \[3\]. This drop-off cleanly isolates which preview components are viable priors and which must be replaced by advanced reasoning.
 
-#### What Changed in ARC Prize 2026
+#### 1\. The Perception Layer (Keep: 4-Layer CNN Vision Prior)
 
-The 2026 launch introduced strict countermeasures against brute-force solving and fundamentally changed the scoring math:
+Frontier Vision-Language Models (VLMs) are too slow for the 9-hour Kaggle inference limits and struggle with precise spatial relationships. The optimal perception baseline is the CNN architecture from the preview \[2\]:
 
-* **Massive Scale Increase:** The 2025 preview evaluated agents on just 3 hidden games. The 2026 competition evaluates agents against **110 hidden games**, demanding true cross-game generalization rather than narrow adaptation.
-* **Anti-Brute-Force Design:** The ARC team noted in their post-mortem that the 2025 preview games were too friendly to random search. The 2026 environments are specifically designed to trap, penalize, or fail agents that rely on mindless trial-and-error.
-* **Power-Law Scoring:** This is the most lethal change. In 2026, the action efficiency ratio (Human Actions / Agent Actions) is **squared**. Under a linear model, an agent taking 10x the actions of a human still gets 10% credit. Under the power-law model, taking massive amounts of exploratory actions drives the per-level score to near zero almost instantly.
+* **Input Representation:** 16-channel one-hot encoded frames (64x64 grids).  
+* **Backbone:** A lightweight 4-layer CNN (32→64→128→256 channels).  
+* **Advantage:** Fast inference, highly sample-efficient, and perfectly preserves the 2D spatial inductive biases of the grid environments.
 
-#### Why the 2025 Winner Fails Today
+#### 2\. The Action Filter (Keep: Binary Effect Prediction)
 
-The 2025 Preview was won by Dries Smit with an agent called **StochasticGoose**. It achieved a 12.58% score by completing 18 levels across the 3 hidden games.
+Training an agent directly on environment rewards (win/loss) fails due to long horizons. Instead, the perception layer must be trained on a localized binary classification task \[2\]:
 
-StochasticGoose was effectively a highly optimized "Smart Random" reinforcement learning algorithm using a Convolutional Neural Network (CNN). It brute-forced the state space by permanently storing frame transitions in memory to avoid repeating useless moves.
+* **Objective:** Predict (state, action) \-\> frame\_changed.  
+* **Application:** This acts as an internal simulator. The agent "imagines" interacting with a coordinate; if the CNN predicts no state change, the action is pruned from the search tree.  
+* **2026 Necessity:** This is mandatory to survive the 2026 scoring penalty, where taking dead-end actions quadratically destroys your score via the RHAE formula: $(\\frac{\\text{Human Actions}}{\\text{AI Actions}})^2$ \[4\].
 
-It would fail the 2026 gauntlet for three reasons:
+#### 3\. State Space Compression (Keep: Heuristic Masking)
 
-1. **Catastrophic Action Bloat:** StochasticGoose took over **255,000 actions** to solve those 18 levels. Because of the new power-law scoring math, taking 255,000 actions on levels that humans solve in roughly 500 actions guarantees a score fraction so small it effectively rounds to zero.
-2. **Kaggle Compute Limits:** To brute-force the games, StochasticGoose relied on hashing and storing massive amounts of frame data in memory. The 2026 Kaggle evaluation environment runs strictly offline with tight memory limits and aggressive execution timeouts. Agents that attempt infinite-loop random exploration are rapidly hit with `SIGKILL` terminations.
-3. **Lack of Semantic Understanding:** StochasticGoose didn't actually "understand" the rules of the games; it just mapped state transitions until it stumbled into a win state.
+Raw frame hashing causes state-space explosions in ARC-AGI-3 (e.g., an in-game timer ticking every turn registers as a novel state, breaking experience buffers).
+
+* **Implementation:** Build programmatic heuristic masks to detect and obscure status bars, timers, and non-interactive UI elements before state hashing.  
+* **Buffer Management:** Enforce strict hash-based deduplication in your experience buffer to remain within Kaggle's memory and compute constraints \[2\].
+
+#### 4\. Decision-Making (Scrap: Stochastic Sampling)
+
+The fatal flaw of the preview agents—and why they failed the 2026 benchmark—was relying on sigmoid probabilities (Stochastic Sampling) to blindly pick from the pool of valid actions \[2\].
+
+* **2026 Redesign:** The CNN should only identify the interactive nodes. Once the graph of valid interactions is built, action selection must be handed off to a deterministic reasoning layer (e.g., Monte Carlo Tree Search or inference-time compute via a reasoning LLM) capable of multi-step hypothesis testing and long-horizon planning \[3\].
+
+#### References
+
+\[1\] ARC Prize Foundation. (2025). *ARC‑AGI‑3 Preview Agent Competition*. Retrieved from https://arcprize.org/competitions/arc-agi-3-preview-agents/archive
+
+\[2\] Smit, D. (2025). *StochasticGoose: ARC-AGI-3 Developer Preview Agent Competition Submission*. GitHub. Retrieved from https://github.com/DriesSmit/ARC3-solution
+
+\[3\] ARC Prize Foundation. (2026). *ARC-AGI-3: A New Challenge for Frontier Agentic Intelligence*. arXiv preprint arXiv:2603.24621. Retrieved from https://arxiv.org/abs/2603.24621
+
+\[4\] ARC Prize Foundation. (2026). *ARC Prize 2026 \- ARC-AGI-3 Competition*. Retrieved from https://arcprize.org/competitions/2026/arc-agi-3
