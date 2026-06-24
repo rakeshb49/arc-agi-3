@@ -52,7 +52,7 @@ Submissions to this competition must be made through Notebooks. In order for the
 *   Submission file will be automatically generated.
 
 ### Upgraded Accelerators
-RTX 6000 machines (`g4-standard-48`) are available for this competition.
+NVIDIA RTX PRO 6000 GPU (`g4-standard-48`) is available for this competition.
 
 ---
 
@@ -137,3 +137,30 @@ A **Swarm** orchestrates multiple agent instances across all available games in 
 
 **Total Size:** 48.97 MB (148 files)
 **License:** [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0)
+
+---
+
+### [ARC-AGI-3 Preview Agent Competition](https://arcprize.org/blog/arc-agi-3-preview-30-day-learnings)
+The winning solution from the 2025 Preview would score close to 0% in the current ARC Prize 2026 track.
+
+The preview was a sandbox designed to catch exactly the kinds of shortcuts the 2025 winner used. Here is what changed and why the old meta is dead.
+
+#### What Changed in ARC Prize 2026
+
+The 2026 launch introduced strict countermeasures against brute-force solving and fundamentally changed the scoring math:
+
+* **Massive Scale Increase:** The 2025 preview evaluated agents on just 3 hidden games. The 2026 competition evaluates agents against **110 hidden games**, demanding true cross-game generalization rather than narrow adaptation.
+* **Anti-Brute-Force Design:** The ARC team noted in their post-mortem that the 2025 preview games were too friendly to random search. The 2026 environments are specifically designed to trap, penalize, or fail agents that rely on mindless trial-and-error.
+* **Power-Law Scoring:** This is the most lethal change. In 2026, the action efficiency ratio (Human Actions / Agent Actions) is **squared**. Under a linear model, an agent taking 10x the actions of a human still gets 10% credit. Under the power-law model, taking massive amounts of exploratory actions drives the per-level score to near zero almost instantly.
+
+#### Why the 2025 Winner Fails Today
+
+The 2025 Preview was won by Dries Smit with an agent called **StochasticGoose**. It achieved a 12.58% score by completing 18 levels across the 3 hidden games.
+
+StochasticGoose was effectively a highly optimized "Smart Random" reinforcement learning algorithm using a Convolutional Neural Network (CNN). It brute-forced the state space by permanently storing frame transitions in memory to avoid repeating useless moves.
+
+It would fail the 2026 gauntlet for three reasons:
+
+1. **Catastrophic Action Bloat:** StochasticGoose took over **255,000 actions** to solve those 18 levels. Because of the new power-law scoring math, taking 255,000 actions on levels that humans solve in roughly 500 actions guarantees a score fraction so small it effectively rounds to zero.
+2. **Kaggle Compute Limits:** To brute-force the games, StochasticGoose relied on hashing and storing massive amounts of frame data in memory. The 2026 Kaggle evaluation environment runs strictly offline with tight memory limits and aggressive execution timeouts. Agents that attempt infinite-loop random exploration are rapidly hit with `SIGKILL` terminations.
+3. **Lack of Semantic Understanding:** StochasticGoose didn't actually "understand" the rules of the games; it just mapped state transitions until it stumbled into a win state.
