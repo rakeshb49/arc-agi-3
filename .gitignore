@@ -16,3 +16,6 @@ scorecards/
 artifacts/*
 !artifacts/exp-*/scorecard.json
 !artifacts/exp-*/metrics.json
+
+you_res.py
+.idea/

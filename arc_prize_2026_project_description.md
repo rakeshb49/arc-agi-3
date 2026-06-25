@@ -52,7 +52,7 @@ Submissions to this competition must be made through Notebooks. In order for the
 *   Submission file will be automatically generated.
 
 ### Upgraded Accelerators
-NVIDIA RTX PRO 6000 GPU (`g4-standard-48`) is available for this competition.
+NVIDIA RTX PRO 6000 Blackwell GPU (`g4-standard-48`) is available for this competition. Final-inference hardware profile: **48 vCPUs; 96GB GDDR7 GPU memory**. Note this budget applies to **final inference only** (≤9h, internet disabled, single GPU); **training, experimentation, and testing are unconstrained** and must be performed offline ahead of submission.
 
 ---
 
@@ -107,6 +107,8 @@ AI agents are scored on **two criteria**:
 * **Total score** = Average of all individual game scores.
 * Final output is a score between **0%–100%**.
 
+> **RHAE consequence (load-bearing):** A level scores **0 unless completed**; once completed, every wasted or dead-end **live-board** action is punished **quadratically** via the Relative Human Action Efficiency formula $(\frac{\text{Human Actions}}{\text{AI Actions}})^2$. Completion is the gate; **live-action** efficiency is the squared multiplier. There is therefore **no acceptable "exploratory" live move** — probing the live API to learn a game (e.g., spending live actions to discover what `ACTION6` does) permanently caps that level's score before the real solution begins.
+
 ---
 
 ### ARC-AGI Toolkit
@@ -142,36 +144,46 @@ A **Swarm** orchestrates multiple agent instances across all available games in 
 
 ### ARC-AGI-3 Preview Findings: Architectural Primitives for 2026
 
-The July–August 2025 Preview Competition (won by StochasticGoose at 12.58%) \[1\]\[2\] proved that scaling standard RL or injecting raw grid frames into LLMs fails due to sample inefficiency and context limits \[3\]. When the preview winner was later evaluated on the full 2026 benchmark, its score plummeted to 0.25% \[3\]. This drop-off cleanly isolates which preview components are viable priors and which must be replaced by advanced reasoning.
+The July–August 2025 Preview Competition (won by StochasticGoose at 12.58%) \[1\]\[2\] proved that scaling standard RL or injecting raw grid frames into LLMs fails due to sample inefficiency and context limits \[3\]. When the preview winner was later evaluated on the full 2026 benchmark, its score plummeted to 0.25% \[3\]. This drop-off cleanly isolates **patched exploits that MUST NOT be used (SCRAP)** from **optional priors that may be reused, refined, or superseded only if empirically best (KEEP)**.
 
-#### 1\. The Perception Layer (Keep: 4-Layer CNN Vision Prior)
+#### 1\. The Perception Layer (KEEP — optional: 4-Layer CNN Vision Prior)
 
-Frontier Vision-Language Models (VLMs) are too slow for the 9-hour Kaggle inference limits and struggle with precise spatial relationships. The optimal perception baseline is the CNN architecture from the preview \[2\]:
+Frontier Vision-Language Models (VLMs) are too slow for the 9-hour Kaggle inference limits and struggle with precise spatial relationships. A strong perception **baseline** (not a mandate) is the CNN architecture from the preview \[2\]:
 
 * **Input Representation:** 16-channel one-hot encoded frames (64x64 grids).  
 * **Backbone:** A lightweight 4-layer CNN (32→64→128→256 channels).  
 * **Advantage:** Fast inference, highly sample-efficient, and perfectly preserves the 2D spatial inductive biases of the grid environments.
+* **Optionality:** Adopt, refine, or replace this only if it wins ablations. Actively research stronger alternatives (object-centric/slot encoders, GNNs over interaction graphs, neural cellular automata, learned-equivalence state abstraction).
 
-#### 2\. The Action Filter (Keep: Binary Effect Prediction)
+#### 2\. The Action Filter (KEEP — optional: Binary Effect Prediction)
 
-Training an agent directly on environment rewards (win/loss) fails due to long horizons. Instead, the perception layer must be trained on a localized binary classification task \[2\]:
+Training an agent directly on environment rewards (win/loss) fails due to long horizons. Instead, a perception model may be trained on a localized binary classification task \[2\]:
 
 * **Objective:** Predict (state, action) \-\> frame\_changed.  
-* **Application:** This acts as an internal simulator. The agent "imagines" interacting with a coordinate; if the CNN predicts no state change, the action is pruned from the search tree.  
-* **2026 Necessity:** This is mandatory to survive the 2026 scoring penalty, where taking dead-end actions quadratically destroys your score via the RHAE formula: $(\\frac{\\text{Human Actions}}{\\text{AI Actions}})^2$ \[4\].
+* **Application:** This acts as an **internal simulator**. The agent "imagines" interacting with a coordinate; if the model predicts no state change, the action is pruned from the search tree **inside the world model — never by probing the live board**.  
+* **2026 Necessity:** Effect-based pruning is critical to survive the squared RHAE penalty, where dead-end **live** actions quadratically destroy your score: $(\frac{\text{Human Actions}}{\text{AI Actions}})^2$ \[4\].
 
-#### 3\. State Space Compression (Keep: Heuristic Masking)
+#### 3\. State Space Compression (KEEP — optional: Heuristic Masking)
 
 Raw frame hashing causes state-space explosions in ARC-AGI-3 (e.g., an in-game timer ticking every turn registers as a novel state, breaking experience buffers).
 
 * **Implementation:** Build programmatic heuristic masks to detect and obscure status bars, timers, and non-interactive UI elements before state hashing.  
 * **Buffer Management:** Enforce strict hash-based deduplication in your experience buffer to remain within Kaggle's memory and compute constraints \[2\].
 
-#### 4\. Decision-Making (Scrap: Stochastic Sampling)
+#### 4\. Decision-Making (SCRAP — hard prohibition: Stochastic Sampling)
 
-The fatal flaw of the preview agents—and why they failed the 2026 benchmark—was relying on sigmoid probabilities (Stochastic Sampling) to blindly pick from the pool of valid actions \[2\].
+The fatal flaw of the preview agents—and why they failed the 2026 benchmark—was relying on sigmoid probabilities (Stochastic Sampling) to blindly pick from the pool of valid actions \[2\]. **The following are patched exploits and MUST NOT be used:**
 
-* **2026 Redesign:** The CNN should only identify the interactive nodes. Once the graph of valid interactions is built, action selection must be handed off to a deterministic reasoning layer (e.g., Monte Carlo Tree Search or inference-time compute via a reasoning LLM) capable of multi-step hypothesis testing and long-horizon planning \[3\].
+* **Stochastic sigmoid action sampling / random walks** over valid actions.
+* **Naive RL reward-scaling** on win/loss over long horizons.
+* **Raw-grid-into-LLM/VLM** pipelines (sample-inefficient, context-limited, too slow for ≤9h).
+* **Live-board epistemic foraging** — using the live evaluation API as a scientific testing ground (see the firewall below).
+
+* **2026 Redesign:** Perception/effect models should only **identify** interactive nodes and build the graph of valid interactions; action **selection** must be handed to a **deterministic reasoning layer** (e.g., Monte Carlo Tree Search or inference-time compute via a reasoning LLM) capable of multi-step hypothesis testing and long-horizon planning \[3\].
+
+#### 5\. Exploration Discipline (Latent-Space Exploration Firewall — mandatory)
+
+Because RHAE squares **live-board** action counts, all curiosity-driven, hypothesis-testing exploration (Active Inference, intrinsic curiosity, count/novelty bonuses, epistemic-reward shaping) **MUST execute entirely inside the agent's internal simulated world model (in VRAM)** — built offline and updated only from **passively observed** frames at inference — and **NEVER on the live evaluation board**. The agent must deduce each game's action semantics, level structure, and win conditions **internally via simulated rollouts**, then emit **live** actions **only** when executing a mathematically verified solution trajectory. To the Kaggle scorer the agent must appear as a **near-zero-shot, flawless executor** whose live-action count approaches the human baseline (efficiency ratio → 1.0).
 
 #### References
 
