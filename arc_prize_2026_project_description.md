@@ -142,55 +142,22 @@ A **Swarm** orchestrates multiple agent instances across all available games in 
 
 ---
 
-### ARC-AGI-3 Preview Findings: Architectural Primitives for 2026
+### Core Architectural Boundaries for 2026 Deployed Agents
 
-The July–August 2025 Preview Competition (won by StochasticGoose at 12.58%) \[1\]\[2\] proved that scaling standard RL or injecting raw grid frames into LLMs fails due to sample inefficiency and context limits \[3\]. When the preview winner was later evaluated on the full 2026 benchmark, its score plummeted to 0.25% \[3\]. This drop-off cleanly isolates **patched exploits that MUST NOT be used (SCRAP)** from **optional priors that may be reused, refined, or superseded only if empirically best (KEEP)**.
+The July–August 2025 Preview Competition isolated fatal structural flaws in early interactive agent designs. To survive the full 2026 benchmark, the agent architecture must enforce strict separation between engineering pipelines, historical baselines, and exploratory firewalls.
 
-#### 1\. The Perception Layer (KEEP — optional: 4-Layer CNN Vision Prior)
+#### 1. Prohibited Loopholes & Patched Exploits (SCRAP)
+The following mechanisms collapse performance on the full evaluation set and are strictly prohibited from the final architecture:
+*   **Inference-Time Deep Learning Training:** Initializing neural network weights randomly and running backpropagation gradients during the 9-hour inference loop will trigger an immediate timeout.
+*   **Stochastic Action Sampling:** Algorithms that draw from valid action spaces via raw probability distributions or random walks are mathematically penalized by the squared RHAE metric.
+*   **Live-Board Epistemic Foraging:** Probing the live evaluation API to run scientific tests or discover action mappings. 
+*   **Naive RL Reward Scaling:** Relying on long-horizon reinforcement learning updates based entirely on sparse terminal win/loss signals.
 
-Frontier Vision-Language Models (VLMs) are too slow for the 9-hour Kaggle inference limits and struggle with precise spatial relationships. A strong perception **baseline** (not a mandate) is the CNN architecture from the preview \[2\]:
+#### 2. Historical Baselines to Supersede (OPTIONAL)
+Legacy 2025 primitives are non-prescriptive. They should be refined, replaced, or completely bypassed if alternative paradigms (such as Program Synthesis or Symbolic DSL induction) demonstrate superior performance:
+*   *Heuristic UI Masking:* Using hand-coded programmatic rules to obscure timers, status bars, and non-interactive grid regions to prevent state-space explosion before hashing.
+*   *Statistical Effect Filters:* Training auxiliary networks purely to classify if an action changes a frame, rather than inferring the semantic rule of *why* it changes.
+*   *Discrete CNN Receptive Fields:* Utilizing fixed, multi-layer convolutional encoders to process one-hot grid tensors, which can limit long-range object-relational tracking.
 
-* **Input Representation:** 16-channel one-hot encoded frames (64x64 grids).  
-* **Backbone:** A lightweight 4-layer CNN (32→64→128→256 channels).  
-* **Advantage:** Fast inference, highly sample-efficient, and perfectly preserves the 2D spatial inductive biases of the grid environments.
-* **Optionality:** Adopt, refine, or replace this only if it wins ablations. Actively research stronger alternatives (object-centric/slot encoders, GNNs over interaction graphs, neural cellular automata, learned-equivalence state abstraction).
-
-#### 2\. The Action Filter (KEEP — optional: Binary Effect Prediction)
-
-Training an agent directly on environment rewards (win/loss) fails due to long horizons. Instead, a perception model may be trained on a localized binary classification task \[2\]:
-
-* **Objective:** Predict (state, action) \-\> frame\_changed.  
-* **Application:** This acts as an **internal simulator**. The agent "imagines" interacting with a coordinate; if the model predicts no state change, the action is pruned from the search tree **inside the world model — never by probing the live board**.  
-* **2026 Necessity:** Effect-based pruning is critical to survive the squared RHAE penalty, where dead-end **live** actions quadratically destroy your score: $(\frac{\text{Human Actions}}{\text{AI Actions}})^2$ \[4\].
-
-#### 3\. State Space Compression (KEEP — optional: Heuristic Masking)
-
-Raw frame hashing causes state-space explosions in ARC-AGI-3 (e.g., an in-game timer ticking every turn registers as a novel state, breaking experience buffers).
-
-* **Implementation:** Build programmatic heuristic masks to detect and obscure status bars, timers, and non-interactive UI elements before state hashing.  
-* **Buffer Management:** Enforce strict hash-based deduplication in your experience buffer to remain within Kaggle's memory and compute constraints \[2\].
-
-#### 4\. Decision-Making (SCRAP — hard prohibition: Stochastic Sampling)
-
-The fatal flaw of the preview agents—and why they failed the 2026 benchmark—was relying on sigmoid probabilities (Stochastic Sampling) to blindly pick from the pool of valid actions \[2\]. **The following are patched exploits and MUST NOT be used:**
-
-* **Stochastic sigmoid action sampling / random walks** over valid actions.
-* **Naive RL reward-scaling** on win/loss over long horizons.
-* **Raw-grid-into-LLM/VLM** pipelines (sample-inefficient, context-limited, too slow for ≤9h).
-* **Live-board epistemic foraging** — using the live evaluation API as a scientific testing ground (see the firewall below).
-
-* **2026 Redesign:** Perception/effect models should only **identify** interactive nodes and build the graph of valid interactions; action **selection** must be handed to a **deterministic reasoning layer** (e.g., Monte Carlo Tree Search or inference-time compute via a reasoning LLM) capable of multi-step hypothesis testing and long-horizon planning \[3\].
-
-#### 5\. Exploration Discipline (Latent-Space Exploration Firewall — mandatory)
-
-Because RHAE squares **live-board** action counts, all curiosity-driven, hypothesis-testing exploration (Active Inference, intrinsic curiosity, count/novelty bonuses, epistemic-reward shaping) **MUST execute entirely inside the agent's internal simulated world model (in VRAM)** — built offline and updated only from **passively observed** frames at inference — and **NEVER on the live evaluation board**. The agent must deduce each game's action semantics, level structure, and win conditions **internally via simulated rollouts**, then emit **live** actions **only** when executing a mathematically verified solution trajectory. To the Kaggle scorer the agent must appear as a **near-zero-shot, flawless executor** whose live-action count approaches the human baseline (efficiency ratio → 1.0).
-
-#### References
-
-\[1\] ARC Prize Foundation. (2025). *ARC‑AGI‑3 Preview Agent Competition*. Retrieved from https://arcprize.org/competitions/arc-agi-3-preview-agents/archive
-
-\[2\] Smit, D. (2025). *StochasticGoose: ARC-AGI-3 Developer Preview Agent Competition Submission*. GitHub. Retrieved from https://github.com/DriesSmit/ARC3-solution
-
-\[3\] ARC Prize Foundation. (2026). *ARC-AGI-3: A New Challenge for Frontier Agentic Intelligence*. arXiv preprint arXiv:2603.24621. Retrieved from https://arxiv.org/abs/2603.24621
-
-\[4\] ARC Prize Foundation. (2026). *ARC Prize 2026 \- ARC-AGI-3 Competition*. Retrieved from https://arcprize.org/competitions/2026/arc-agi-3
+#### 3. The Latent-Space Exploration Firewall (MANDATORY)
+To achieve an optimal efficiency score, **all curiosity-driven exploration, hypothesis generation, invariant testing, and world-rule induction must execute entirely within an internal, simulated world model in VRAM.**
